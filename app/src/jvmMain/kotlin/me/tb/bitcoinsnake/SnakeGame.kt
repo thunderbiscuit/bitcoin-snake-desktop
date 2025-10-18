@@ -4,6 +4,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -13,11 +14,16 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.key.*
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlin.random.Random
@@ -29,12 +35,22 @@ enum class Direction {
     UP, DOWN, LEFT, RIGHT
 }
 
+enum class Speed(val delayMs: Long) {
+    SLOW(170),
+    MEDIUM(140),
+    FAST(110),
+    VERY_FAST(90),
+    EXTREME(70)
+}
+
 data class GameState(
     val snake: List<Position>,
     val food: Position,
     val direction: Direction,
     val isGameOver: Boolean = false,
-    val score: Int = 0
+    val score: Int = 0,
+    val pauses: Int = 1,
+    val deathPosition: Position? = null
 )
 
 // Game constants
@@ -46,29 +62,44 @@ class SnakeGameLogic(
 ) {
     fun createInitialState(): GameState {
         val initialSnake = listOf(
-            Position(gridSize / 2, gridSize / 2),
-            Position(gridSize / 2 - 1, gridSize / 2),
-            Position(gridSize / 2 - 2, gridSize / 2)
+            Position(8, 12),
+            Position(7, 12),
+            Position(6,12)
         )
         return GameState(
             snake = initialSnake,
-            food = generateFood(initialSnake),
+            food = Position(16, 12),
             direction = Direction.RIGHT,
-            score = 0
+            score = 0,
+            pauses = 1
         )
     }
 
     fun updateGame(state: GameState, newDirection: Direction): GameState {
         if (state.isGameOver) return state
 
-        // Prevent reversing direction
-        val validDirection = when {
-            state.direction == Direction.UP && newDirection == Direction.DOWN -> state.direction
-            state.direction == Direction.DOWN && newDirection == Direction.UP -> state.direction
-            state.direction == Direction.LEFT && newDirection == Direction.RIGHT -> state.direction
-            state.direction == Direction.RIGHT && newDirection == Direction.LEFT -> state.direction
-            else -> newDirection
+        // Check if player is trying to reverse direction - if so, game over
+        val isReverseDirection = when {
+            state.direction == Direction.UP && newDirection == Direction.DOWN -> true
+            state.direction == Direction.DOWN && newDirection == Direction.UP -> true
+            state.direction == Direction.LEFT && newDirection == Direction.RIGHT -> true
+            state.direction == Direction.RIGHT && newDirection == Direction.LEFT -> true
+            else -> false
         }
+
+        if (isReverseDirection) {
+            // Mark the position where the head would have been
+            val head = state.snake.first()
+            val deathPos = when (newDirection) {
+                Direction.UP -> Position(head.x, (head.y - 1 + gridSize) % gridSize)
+                Direction.DOWN -> Position(head.x, (head.y + 1) % gridSize)
+                Direction.LEFT -> Position((head.x - 1 + gridSize) % gridSize, head.y)
+                Direction.RIGHT -> Position((head.x + 1) % gridSize, head.y)
+            }
+            return state.copy(isGameOver = true, deathPosition = deathPos)
+        }
+
+        val validDirection = newDirection
 
         // Calculate new head position
         val head = state.snake.first()
@@ -81,7 +112,7 @@ class SnakeGameLogic(
 
         // Check collision with self
         if (state.snake.contains(newHead)) {
-            return state.copy(isGameOver = true)
+            return state.copy(isGameOver = true, deathPosition = newHead)
         }
 
         // Check if food is eaten
@@ -127,14 +158,24 @@ fun SnakeGame() {
     val gameLogic = remember { SnakeGameLogic() }
     var gameState by remember { mutableStateOf(gameLogic.createInitialState()) }
     var currentDirection by remember { mutableStateOf(Direction.RIGHT) }
-    var isPlaying by remember { mutableStateOf(true) }
+    var isPlaying by remember { mutableStateOf(false) }
+    var showModeSelection by remember { mutableStateOf(true) }
+    var gameMode by remember { mutableStateOf<String?>(null) }
     val focusRequester = remember { FocusRequester() }
 
-    // Game loop
-    LaunchedEffect(isPlaying) {
+    // Game loop with dynamic speed
+    LaunchedEffect(isPlaying, gameState.score) {
         if (isPlaying && !gameState.isGameOver) {
             while (isActive && !gameState.isGameOver) {
-                delay(150) // Game speed
+                // Speed increases every 16 foods eaten
+                val currentSpeed = when (gameState.score) {
+                    in 0..15 -> Speed.SLOW
+                    in 16..31 -> Speed.MEDIUM
+                    in 32..47 -> Speed.FAST
+                    in 48..63 -> Speed.VERY_FAST
+                    else -> Speed.EXTREME
+                }
+                delay(currentSpeed.delayMs)
                 gameState = gameLogic.updateGame(gameState, currentDirection)
             }
             if (gameState.isGameOver) {
@@ -156,22 +197,41 @@ fun SnakeGame() {
             .focusRequester(focusRequester)
             .focusable()
             .onKeyEvent { event ->
-                if (event.type == KeyEventType.KeyDown && isPlaying) {
+                if (event.type == KeyEventType.KeyDown) {
                     when (event.key) {
                         Key.DirectionUp, Key.W -> {
-                            currentDirection = Direction.UP
-                            true
+                            if (isPlaying) {
+                                currentDirection = Direction.UP
+                                true
+                            } else false
                         }
                         Key.DirectionDown, Key.S -> {
-                            currentDirection = Direction.DOWN
-                            true
+                            if (isPlaying) {
+                                currentDirection = Direction.DOWN
+                                true
+                            } else false
                         }
                         Key.DirectionLeft, Key.A -> {
-                            currentDirection = Direction.LEFT
-                            true
+                            if (isPlaying) {
+                                currentDirection = Direction.LEFT
+                                true
+                            } else false
                         }
                         Key.DirectionRight, Key.D -> {
-                            currentDirection = Direction.RIGHT
+                            if (isPlaying) {
+                                currentDirection = Direction.RIGHT
+                                true
+                            } else false
+                        }
+                        Key.Spacebar -> {
+                            if (!isPlaying && !gameState.isGameOver) {
+                                // Unpause
+                                isPlaying = true
+                            } else if (isPlaying && gameState.pauses > 0) {
+                                // Pause (only if pauses remaining)
+                                isPlaying = false
+                                gameState = gameState.copy(pauses = gameState.pauses - 1)
+                            }
                             true
                         }
                         else -> false
@@ -183,19 +243,30 @@ fun SnakeGame() {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        // Score display
-        Text(
-            text = "Score: ${gameState.score}",
-            style = MaterialTheme.typography.headlineMedium,
-            color = Color.White,
-            modifier = Modifier.padding(bottom = 20.dp)
-        )
+        // Score and pauses display
+        Row(
+            modifier = Modifier.padding(bottom = 20.dp),
+            horizontalArrangement = Arrangement.spacedBy(30.dp)
+        ) {
+            Text(
+                text = "Score: ${gameState.score}",
+                style = MaterialTheme.typography.headlineMedium,
+                color = Color.White,
+                fontFamily = FontFamily.Monospace
+            )
+            Text(
+                text = "Pauses: ${gameState.pauses}",
+                style = MaterialTheme.typography.headlineMedium,
+                color = if (gameState.pauses > 0) Color(0xFF4CAF50) else Color.Gray,
+                fontFamily = FontFamily.Monospace
+            )
+        }
 
         // Game board
         Canvas(
             modifier = Modifier
                 .size((GRID_SIZE * CELL_SIZE).dp)
-                .background(Color(0xFF2D2D2D))
+                .background(color = Color(0xFF2D2D2D), shape = RoundedCornerShape(8.dp))
         ) {
             val cellSizePx = CELL_SIZE * density
 
@@ -210,57 +281,53 @@ fun SnakeGame() {
             }
 
             // Draw food
-            drawRect(
+            drawRoundRect(
                 color = Color(0xFFF44336),
                 topLeft = Offset(gameState.food.x * cellSizePx, gameState.food.y * cellSizePx),
-                size = Size(cellSizePx - 2, cellSizePx - 2)
+                size = Size(cellSizePx - 4, cellSizePx - 4),
+                cornerRadius = CornerRadius(12f, 12f)
             )
-        }
 
-        Spacer(modifier = Modifier.height(20.dp))
+            // Draw X at death position if game is over
+            gameState.deathPosition?.let { deathPos ->
+                val centerX = deathPos.x * cellSizePx + cellSizePx / 2
+                val centerY = deathPos.y * cellSizePx + cellSizePx / 2
+                val offset = cellSizePx / 3
 
-        // Controls
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            if (!isPlaying) {
-                Button(
-                    onClick = {
-                        if (gameState.isGameOver) {
-                            gameState = gameLogic.createInitialState()
-                            currentDirection = Direction.RIGHT
-                        }
-                        isPlaying = true
-                        focusRequester.requestFocus()
-                    }
-                ) {
-                    Text(if (gameState.isGameOver) "Restart" else "Start")
-                }
-            } else {
-                Button(
-                    onClick = {
-                        isPlaying = false
-                    }
-                ) {
-                    Text("Pause")
-                }
+                // Draw X with two lines
+                drawLine(
+                    color = Color.Black,
+                    start = Offset(centerX - offset, centerY - offset),
+                    end = Offset(centerX + offset, centerY + offset),
+                    strokeWidth = 4f,
+                    cap = StrokeCap.Round
+                )
+                drawLine(
+                    color = Color.Black,
+                    start = Offset(centerX + offset, centerY - offset),
+                    end = Offset(centerX - offset, centerY + offset),
+                    strokeWidth = 4f,
+                    cap = StrokeCap.Round
+                )
             }
         }
 
-        if (gameState.isGameOver) {
-            Spacer(modifier = Modifier.height(20.dp))
+        Spacer(modifier = Modifier.height(20.dp))
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
             Text(
-                text = "Game Over!",
-                style = MaterialTheme.typography.headlineLarge,
-                color = Color.Red
+                text = "Use arrow keys or WASD to control the snake.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color.Gray,
+                fontFamily = FontFamily.Monospace
+            )
+            Text(
+                text = "Press SPACE to pause/unpause (1 pause per game).",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.Gray,
+                fontFamily = FontFamily.Monospace
             )
         }
-
-        Spacer(modifier = Modifier.height(20.dp))
-        Text(
-            text = "Use arrow keys or WASD to control the snake",
-            style = MaterialTheme.typography.bodyMedium,
-            color = Color.Gray
-        )
     }
 }
