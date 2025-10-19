@@ -78,6 +78,7 @@ data class GameState(
     val isGameOver: Boolean = false,
     val score: Int = 0,
     val pauses: Int = 1,
+    val lives: Int = 0,
     val deathPosition: Position? = null
 )
 
@@ -88,7 +89,7 @@ const val CELL_SIZE = 25f
 class SnakeGameLogic(
     private val gridSize: Int = GRID_SIZE
 ) {
-    fun createInitialState(): GameState {
+    fun createInitialState(pauses: Int = 1, lives: Int = 0): GameState {
         val initialSnake = listOf(
             Position(8, 12),
             Position(7, 12),
@@ -99,19 +100,35 @@ class SnakeGameLogic(
             food = Position(16, 12),
             direction = Direction.RIGHT,
             score = 0,
-            pauses = 1
+            pauses = pauses,
+            lives = lives
+        )
+    }
+
+    fun respawnSnake(state: GameState): GameState {
+        val initialSnake = listOf(
+            Position(8, 12),
+            Position(7, 12),
+            Position(6, 12)
+        )
+        return state.copy(
+            snake = initialSnake,
+            direction = Direction.RIGHT,
+            food = generateFood(initialSnake),
+            deathPosition = null,
+            lives = state.lives - 1
         )
     }
 
     fun updateGame(state: GameState, newDirection: Direction): GameState {
         if (state.isGameOver) return state
 
-        // Check if player is trying to reverse direction - if so, game over
-        val isReverseDirection = when {
-            state.direction == Direction.UP && newDirection == Direction.DOWN -> true
-            state.direction == Direction.DOWN && newDirection == Direction.UP -> true
-            state.direction == Direction.LEFT && newDirection == Direction.RIGHT -> true
-            state.direction == Direction.RIGHT && newDirection == Direction.LEFT -> true
+        // Check if player is trying to reverse direction - if so, game over or lose life
+        val isReverseDirection = when (state.direction) {
+            Direction.UP if newDirection == Direction.DOWN    -> true
+            Direction.DOWN if newDirection == Direction.UP    -> true
+            Direction.LEFT if newDirection == Direction.RIGHT -> true
+            Direction.RIGHT if newDirection == Direction.LEFT -> true
             else -> false
         }
 
@@ -119,12 +136,16 @@ class SnakeGameLogic(
             // Mark the position where the head would have been
             val head = state.snake.first()
             val deathPos = when (newDirection) {
-                Direction.UP -> Position(head.x, (head.y - 1 + gridSize) % gridSize)
-                Direction.DOWN -> Position(head.x, (head.y + 1) % gridSize)
-                Direction.LEFT -> Position((head.x - 1 + gridSize) % gridSize, head.y)
-                Direction.RIGHT -> Position((head.x + 1) % gridSize, head.y)
+                Direction.UP -> Position(head.x, head.y - 1)
+                Direction.DOWN -> Position(head.x, head.y + 1)
+                Direction.LEFT -> Position(head.x - 1, head.y)
+                Direction.RIGHT -> Position(head.x + 1, head.y)
             }
-            return state.copy(isGameOver = true, deathPosition = deathPos)
+            return if (state.lives > 0) {
+                state.copy(deathPosition = deathPos)
+            } else {
+                state.copy(isGameOver = true, deathPosition = deathPos)
+            }
         }
 
         val validDirection = newDirection
@@ -132,15 +153,28 @@ class SnakeGameLogic(
         // Calculate new head position
         val head = state.snake.first()
         val newHead = when (validDirection) {
-            Direction.UP -> Position(head.x, (head.y - 1 + gridSize) % gridSize)
-            Direction.DOWN -> Position(head.x, (head.y + 1) % gridSize)
-            Direction.LEFT -> Position((head.x - 1 + gridSize) % gridSize, head.y)
-            Direction.RIGHT -> Position((head.x + 1) % gridSize, head.y)
+            Direction.UP -> Position(head.x, head.y - 1)
+            Direction.DOWN -> Position(head.x, head.y + 1)
+            Direction.LEFT -> Position(head.x - 1, head.y)
+            Direction.RIGHT -> Position(head.x + 1, head.y)
+        }
+
+        // Check collision with wall
+        if (newHead.x < 0 || newHead.x >= gridSize || newHead.y < 0 || newHead.y >= gridSize) {
+            return if (state.lives > 0) {
+                state.copy(deathPosition = newHead)
+            } else {
+                state.copy(isGameOver = true, deathPosition = newHead)
+            }
         }
 
         // Check collision with self
         if (state.snake.contains(newHead)) {
-            return state.copy(isGameOver = true, deathPosition = newHead)
+            return if (state.lives > 0) {
+                state.copy(deathPosition = newHead)
+            } else {
+                state.copy(isGameOver = true, deathPosition = newHead)
+            }
         }
 
         // Check if food is eaten
@@ -182,14 +216,39 @@ class SnakeGameLogic(
 
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
-fun SnakeGame() {
+fun SnakeGame(
+    onRestartRequest: (() -> Unit)? = null
+) {
     val gameLogic = remember { SnakeGameLogic() }
+    val leaderboardManager = remember { LeaderboardManager() }
     var gameState by remember { mutableStateOf(gameLogic.createInitialState()) }
     var currentDirection by remember { mutableStateOf(Direction.RIGHT) }
     var isPlaying by remember { mutableStateOf(false) }
-    var showModeSelection by remember { mutableStateOf(true) }
+    val modeSelectionDialogState = rememberDialogState(initiallyVisible = true)
     var gameMode by remember { mutableStateOf<String?>(null) }
+    val nameDialogState = rememberDialogState()
+    val leaderboardDialogState = rememberDialogState()
+    var playerName by remember { mutableStateOf("") }
+    var leaderboard by remember { mutableStateOf(leaderboardManager.loadLeaderboard()) }
     val focusRequester = remember { FocusRequester() }
+
+    // Expose restart function
+    LaunchedEffect(onRestartRequest) {
+        onRestartRequest?.let {
+            // Function is available for external restart
+        }
+    }
+
+    // Handle respawn when player has lives
+    LaunchedEffect(gameState.deathPosition, gameState.lives) {
+        if (gameState.deathPosition != null && gameState.lives > 0 && !gameState.isGameOver) {
+            isPlaying = false
+            delay(1000) // Show death animation for 1 second
+            gameState = gameLogic.respawnSnake(gameState)
+            currentDirection = Direction.RIGHT
+            // Don't auto-resume, wait for player to press a key
+        }
+    }
 
     // Game loop with dynamic speed
     LaunchedEffect(isPlaying, gameState.score) {
@@ -197,17 +256,21 @@ fun SnakeGame() {
             while (isActive && !gameState.isGameOver) {
                 // Speed increases every 16 foods eaten
                 val currentSpeed = when (gameState.score) {
-                    in 0..15 -> Speed.SLOW
+                    in  0..15 -> Speed.SLOW
                     in 16..31 -> Speed.MEDIUM
                     in 32..47 -> Speed.FAST
                     in 48..63 -> Speed.VERY_FAST
-                    else -> Speed.EXTREME
+                    else            -> Speed.EXTREME
                 }
                 delay(currentSpeed.delayMs)
                 gameState = gameLogic.updateGame(gameState, currentDirection)
             }
             if (gameState.isGameOver) {
                 isPlaying = false
+                // Show name dialog if in glory mode and it's a top score
+                if (gameMode == "glory" && leaderboard.isTopScore(gameState.score)) {
+                    nameDialogState.visible = true
+                }
             }
         }
     }
@@ -217,19 +280,210 @@ fun SnakeGame() {
         focusRequester.requestFocus()
     }
 
-    Column(
+    // Mode selection dialog
+    Dialog(state = modeSelectionDialogState) {
+        Scrim(
+            scrimColor = Color.Black.copy(alpha = 0.8f),
+            enter = fadeIn(),
+            exit = fadeOut()
+        )
+
+        DialogPanel(
+            modifier = Modifier
+                .background(Color(0xFF2D2D2D), RoundedCornerShape(16.dp))
+                .width(700.dp)
+                .padding(40.dp)
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(20.dp)
+            ) {
+                Text(
+                    text = "Bitcoin Snake",
+                    style = MaterialTheme.typography.headlineLarge,
+                    color = Color.White,
+                    fontFamily = FontFamily.Monospace
+                )
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                Button(
+                    onClick = {
+                        gameMode = "practice"
+                        gameState = gameLogic.createInitialState(pauses = 0, lives = 1)
+                        modeSelectionDialogState.visible = false
+                        isPlaying = false
+                        focusRequester.requestFocus()
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("I want practice", fontFamily = FontFamily.Monospace)
+                }
+
+                Button(
+                    onClick = {
+                        gameMode = "glory"
+                        modeSelectionDialogState.visible = false
+                        isPlaying = false
+                        focusRequester.requestFocus()
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("I want glory", fontFamily = FontFamily.Monospace)
+                }
+
+                Button(
+                    onClick = {
+                        modeSelectionDialogState.visible = false
+                        leaderboardDialogState.visible = true
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Show me the leaderboard", fontFamily = FontFamily.Monospace)
+                }
+            }
+        }
+    }
+
+    // Leaderboard modal
+    Dialog(state = leaderboardDialogState) {
+        DialogPanel(
+            modifier = Modifier
+                .background(Color(0xFF2D2D2D), RoundedCornerShape(16.dp))
+                .padding(40.dp)
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(15.dp)
+            ) {
+                Text(
+                    text = "Top 10 Leaderboard",
+                    style = MaterialTheme.typography.headlineLarge,
+                    color = Color(0xFF4CAF50),
+                    fontFamily = FontFamily.Monospace
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                if (leaderboard.entries.isEmpty()) {
+                    Text(
+                        text = "No scores yet!",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = Color.Gray,
+                        fontFamily = FontFamily.Monospace
+                    )
+                } else {
+                    leaderboard.entries.forEachIndexed { index, entry ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "${index + 1}. ${entry.playerName}",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = Color.White,
+                                fontFamily = FontFamily.Monospace
+                            )
+                            Text(
+                                text = "${entry.score}",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = Color.White,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
+                    }
+                }
+
+                // Show back button only if no game mode is selected yet
+                if (gameMode == null) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Button(
+                        onClick = {
+                            leaderboardDialogState.visible = false
+                            modeSelectionDialogState.visible = true
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Back", fontFamily = FontFamily.Monospace)
+                    }
+                }
+            }
+        }
+    }
+
+    // Name input dialog for leaderboard
+    Dialog(state = nameDialogState) {
+        DialogPanel(
+            modifier = Modifier
+                .background(Color(0xFF2D2D2D), RoundedCornerShape(16.dp))
+                .padding(40.dp)
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(20.dp)
+            ) {
+                Text(
+                    text = "Top 10 Score!",
+                    style = MaterialTheme.typography.headlineLarge,
+                    color = Color(0xFF4CAF50),
+                    fontFamily = FontFamily.Monospace
+                )
+
+                Text(
+                    text = "Score: ${gameState.score}",
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = Color.White,
+                    fontFamily = FontFamily.Monospace
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                TextField(
+                    value = playerName,
+                    onValueChange = { playerName = it },
+                    label = { Text("Enter your name", fontFamily = FontFamily.Monospace) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Button(
+                    onClick = {
+                        if (playerName.isNotBlank()) {
+                            leaderboard = leaderboardManager.addScore(playerName.trim(), gameState.score)
+                            nameDialogState.visible = false
+                            playerName = ""
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Save Score", fontFamily = FontFamily.Monospace)
+                }
+            }
+        }
+    }
+
+    Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xFF1E1E1E))
-            .padding(20.dp)
-            .focusRequester(focusRequester)
-            .focusable()
-            .onKeyEvent { event ->
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(20.dp)
+                .focusRequester(focusRequester)
+                .focusable()
+                .onKeyEvent { event ->
                 if (event.type == KeyEventType.KeyDown) {
                     when (event.key) {
                         Key.DirectionUp, Key.W -> {
                             if (isPlaying) {
                                 currentDirection = Direction.UP
+                                true
+                            } else if (!gameState.isGameOver && gameMode == "practice") {
+                                // In practice mode, any direction key starts the game after respawn
+                                currentDirection = Direction.UP
+                                isPlaying = true
                                 true
                             } else false
                         }
@@ -237,11 +491,19 @@ fun SnakeGame() {
                             if (isPlaying) {
                                 currentDirection = Direction.DOWN
                                 true
+                            } else if (!gameState.isGameOver && gameMode == "practice") {
+                                currentDirection = Direction.DOWN
+                                isPlaying = true
+                                true
                             } else false
                         }
                         Key.DirectionLeft, Key.A -> {
                             if (isPlaying) {
                                 currentDirection = Direction.LEFT
+                                true
+                            } else if (!gameState.isGameOver && gameMode == "practice") {
+                                currentDirection = Direction.LEFT
+                                isPlaying = true
                                 true
                             } else false
                         }
@@ -249,14 +511,21 @@ fun SnakeGame() {
                             if (isPlaying) {
                                 currentDirection = Direction.RIGHT
                                 true
+                            } else if (!gameState.isGameOver && gameMode == "practice") {
+                                currentDirection = Direction.RIGHT
+                                isPlaying = true
+                                true
                             } else false
                         }
                         Key.Spacebar -> {
-                            if (!isPlaying && !gameState.isGameOver) {
-                                // Unpause
+                            if (!isPlaying && !gameState.isGameOver && gameMode == "glory") {
+                                // Unpause (only in glory mode)
                                 isPlaying = true
-                            } else if (isPlaying && gameState.pauses > 0) {
-                                // Pause (only if pauses remaining)
+                            } else if (!isPlaying && !gameState.isGameOver && gameMode == "practice") {
+                                // Start game in practice mode
+                                isPlaying = true
+                            } else if (isPlaying && gameState.pauses > 0 && gameMode == "glory") {
+                                // Pause (only if pauses remaining and in glory mode)
                                 isPlaying = false
                                 gameState = gameState.copy(pauses = gameState.pauses - 1)
                             }
@@ -271,7 +540,7 @@ fun SnakeGame() {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        // Score and pauses display
+        // Score, pauses, and lives display
         Row(
             modifier = Modifier.padding(bottom = 20.dp),
             horizontalArrangement = Arrangement.spacedBy(30.dp)
@@ -282,12 +551,21 @@ fun SnakeGame() {
                 color = Color.White,
                 fontFamily = FontFamily.Monospace
             )
-            Text(
-                text = "Pauses: ${gameState.pauses}",
-                style = MaterialTheme.typography.headlineMedium,
-                color = if (gameState.pauses > 0) Color(0xFF4CAF50) else Color.Gray,
-                fontFamily = FontFamily.Monospace
-            )
+            if (gameMode == "practice") {
+                Text(
+                    text = "Lives: ${gameState.lives + 1}",
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = if (!gameState.isGameOver) Color(0xFFFF9800) else Color.Gray,
+                    fontFamily = FontFamily.Monospace
+                )
+            } else {
+                Text(
+                    text = "Pauses: ${gameState.pauses}",
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = if (gameState.pauses > 0) Color(0xFF4CAF50) else Color.Gray,
+                    fontFamily = FontFamily.Monospace
+                )
+            }
         }
 
         // Game board
@@ -350,11 +628,36 @@ fun SnakeGame() {
                 color = Color.Gray,
                 fontFamily = FontFamily.Monospace
             )
-            Text(
-                text = "Press SPACE to pause/unpause (1 pause per game).",
-                style = MaterialTheme.typography.bodySmall,
-                color = Color.Gray,
-                fontFamily = FontFamily.Monospace
+            if (gameMode == "glory") {
+                Text(
+                    text = "Press SPACE to pause/unpause (1 pause per game).",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.Gray,
+                    fontFamily = FontFamily.Monospace
+                )
+            } else if (gameMode == "practice") {
+                Text(
+                    text = "Practice mode: 1 extra life, no pauses. Press SPACE to start.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFFFF9800),
+                    fontFamily = FontFamily.Monospace
+                )
+            }
+        }
+        }
+
+        // Leaderboard icon button (top right)
+        IconButton(
+            onClick = { leaderboardDialogState.visible = true },
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(20.dp)
+        ) {
+            Icon(
+                imageVector = Lucide.Trophy,
+                contentDescription = "Show Leaderboard",
+                tint = Color(0xFFFFD700),
+                modifier = Modifier.size(32.dp)
             )
         }
     }
