@@ -16,15 +16,31 @@ import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 
 fun main() = application {
+    var restartTrigger by remember { mutableStateOf(0) }
+
     Window(
         onCloseRequest = ::exitApplication,
         title = "Bitcoin Snake",
         state = rememberWindowState(
             width = 1100.dp,
             height = 900.dp,
-            position = androidx.compose.ui.window.WindowPosition(Alignment.Center)
+            position = WindowPosition(Alignment.Center)
         )
     ) {
-        App()
+        MenuBar {
+            Menu("Game") {
+                Item(
+                    "Restart",
+                    onClick = {
+                        restartTrigger++
+                    },
+                    shortcut = KeyShortcut(Key.R, meta = true)
+                )
+            }
+        }
+
+        key(restartTrigger) {
+            App()
+        }
     }
 }
