@@ -1,4 +1,4 @@
-package me.tb.bitcoinsnake
+package me.tb.bitcoinsnake.presentation
 
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
@@ -54,165 +53,12 @@ import com.composables.core.Scrim
 import com.composables.core.rememberDialogState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
-import kotlin.random.Random
-
-// Data classes for game state
-data class Position(val x: Int, val y: Int)
-
-enum class Direction {
-    UP, DOWN, LEFT, RIGHT
-}
-
-enum class Speed(val delayMs: Long) {
-    SLOW(170),
-    MEDIUM(140),
-    FAST(110),
-    VERY_FAST(90),
-    EXTREME(70)
-}
-
-data class GameState(
-    val snake: List<Position>,
-    val food: Position,
-    val direction: Direction,
-    val isGameOver: Boolean = false,
-    val score: Int = 0,
-    val pauses: Int = 1,
-    val lives: Int = 0,
-    val deathPosition: Position? = null
-)
-
-// Game constants
-const val GRID_SIZE = 24
-const val CELL_SIZE = 25f
-
-class SnakeGameLogic(
-    private val gridSize: Int = GRID_SIZE
-) {
-    fun createInitialState(pauses: Int = 1, lives: Int = 0): GameState {
-        val initialSnake = listOf(
-            Position(8, 12),
-            Position(7, 12),
-            Position(6,12)
-        )
-        return GameState(
-            snake = initialSnake,
-            food = Position(16, 12),
-            direction = Direction.RIGHT,
-            score = 0,
-            pauses = pauses,
-            lives = lives
-        )
-    }
-
-    fun respawnSnake(state: GameState): GameState {
-        val initialSnake = listOf(
-            Position(8, 12),
-            Position(7, 12),
-            Position(6, 12)
-        )
-        return state.copy(
-            snake = initialSnake,
-            direction = Direction.RIGHT,
-            food = generateFood(initialSnake),
-            deathPosition = null,
-            lives = state.lives - 1
-        )
-    }
-
-    fun updateGame(state: GameState, newDirection: Direction): GameState {
-        if (state.isGameOver) return state
-
-        // Check if player is trying to reverse direction - if so, game over or lose life
-        val isReverseDirection = when (state.direction) {
-            Direction.UP if newDirection == Direction.DOWN    -> true
-            Direction.DOWN if newDirection == Direction.UP    -> true
-            Direction.LEFT if newDirection == Direction.RIGHT -> true
-            Direction.RIGHT if newDirection == Direction.LEFT -> true
-            else -> false
-        }
-
-        if (isReverseDirection) {
-            // Mark the position where the head would have been
-            val head = state.snake.first()
-            val deathPos = when (newDirection) {
-                Direction.UP -> Position(head.x, head.y - 1)
-                Direction.DOWN -> Position(head.x, head.y + 1)
-                Direction.LEFT -> Position(head.x - 1, head.y)
-                Direction.RIGHT -> Position(head.x + 1, head.y)
-            }
-            return if (state.lives > 0) {
-                state.copy(deathPosition = deathPos)
-            } else {
-                state.copy(isGameOver = true, deathPosition = deathPos)
-            }
-        }
-
-        val validDirection = newDirection
-
-        // Calculate new head position
-        val head = state.snake.first()
-        val newHead = when (validDirection) {
-            Direction.UP -> Position(head.x, head.y - 1)
-            Direction.DOWN -> Position(head.x, head.y + 1)
-            Direction.LEFT -> Position(head.x - 1, head.y)
-            Direction.RIGHT -> Position(head.x + 1, head.y)
-        }
-
-        // Check collision with wall
-        if (newHead.x < 0 || newHead.x >= gridSize || newHead.y < 0 || newHead.y >= gridSize) {
-            return if (state.lives > 0) {
-                state.copy(deathPosition = newHead)
-            } else {
-                state.copy(isGameOver = true, deathPosition = newHead)
-            }
-        }
-
-        // Check collision with self
-        if (state.snake.contains(newHead)) {
-            return if (state.lives > 0) {
-                state.copy(deathPosition = newHead)
-            } else {
-                state.copy(isGameOver = true, deathPosition = newHead)
-            }
-        }
-
-        // Check if food is eaten
-        val (newSnake, newFood, newScore) = if (newHead == state.food) {
-            // Snake grows, generate new food, increment score
-            Triple(
-                listOf(newHead) + state.snake,
-                generateFood(listOf(newHead) + state.snake),
-                state.score + 1
-            )
-        } else {
-            // Snake moves normally
-            Triple(
-                listOf(newHead) + state.snake.dropLast(1),
-                state.food,
-                state.score
-            )
-        }
-
-        return state.copy(
-            snake = newSnake,
-            food = newFood,
-            direction = validDirection,
-            score = newScore
-        )
-    }
-
-    private fun generateFood(snake: List<Position>): Position {
-        var food: Position
-        do {
-            food = Position(
-                Random.nextInt(gridSize),
-                Random.nextInt(gridSize)
-            )
-        } while (snake.contains(food))
-        return food
-    }
-}
+import me.tb.bitcoinsnake.data.LeaderboardManager
+import me.tb.bitcoinsnake.domain.CELL_SIZE
+import me.tb.bitcoinsnake.domain.Direction
+import me.tb.bitcoinsnake.domain.GRID_SIZE
+import me.tb.bitcoinsnake.domain.SnakeGameLogic
+import me.tb.bitcoinsnake.domain.Speed
 
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
@@ -290,8 +136,8 @@ fun SnakeGame(
 
         DialogPanel(
             modifier = Modifier
+                .fillMaxWidth(0.7f)
                 .background(Color(0xFF2D2D2D), RoundedCornerShape(16.dp))
-                .width(700.dp)
                 .padding(40.dp)
         ) {
             Column(
@@ -347,8 +193,15 @@ fun SnakeGame(
 
     // Leaderboard modal
     Dialog(state = leaderboardDialogState) {
+        Scrim(
+            scrimColor = Color.Black.copy(alpha = 0.8f),
+            enter = fadeIn(),
+            exit = fadeOut()
+        )
+
         DialogPanel(
             modifier = Modifier
+                .fillMaxWidth(0.7f)
                 .background(Color(0xFF2D2D2D), RoundedCornerShape(16.dp))
                 .padding(40.dp)
         ) {
@@ -413,8 +266,15 @@ fun SnakeGame(
 
     // Name input dialog for leaderboard
     Dialog(state = nameDialogState) {
+        Scrim(
+            scrimColor = Color.Black.copy(alpha = 0.8f),
+            enter = fadeIn(),
+            exit = fadeOut()
+        )
+
         DialogPanel(
             modifier = Modifier
+                .fillMaxWidth(0.7f)
                 .background(Color(0xFF2D2D2D), RoundedCornerShape(16.dp))
                 .padding(40.dp)
         ) {

@@ -1,33 +1,9 @@
-package me.tb.bitcoinsnake
+package me.tb.bitcoinsnake.data
 
-import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import me.tb.bitcoinsnake.domain.Leaderboard
+import me.tb.bitcoinsnake.domain.LeaderboardEntry
 import java.io.File
-import java.time.LocalDateTime
-import java.time.format.DateTimeFormatter
-
-@Serializable
-data class LeaderboardEntry(
-    val playerName: String,
-    val score: Int,
-    val timestamp: String = LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME)
-)
-
-@Serializable
-data class Leaderboard(
-    val entries: List<LeaderboardEntry> = emptyList()
-) {
-    fun addEntry(entry: LeaderboardEntry): Leaderboard {
-        val newEntries = (entries + entry)
-            .sortedByDescending { it.score }
-            .take(10) // Keep only top 10
-        return copy(entries = newEntries)
-    }
-
-    fun isTopScore(score: Int): Boolean {
-        return entries.size < 10 || score > (entries.minOfOrNull { it.score } ?: 0)
-    }
-}
 
 class LeaderboardManager(
     private val storageDir: File = File(System.getProperty("user.home"), ".bitcoin-snake")

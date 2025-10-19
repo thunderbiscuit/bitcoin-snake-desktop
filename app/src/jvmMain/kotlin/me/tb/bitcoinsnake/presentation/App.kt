@@ -1,13 +1,12 @@
-package me.tb.bitcoinsnake
+package me.tb.bitcoinsnake.presentation
 
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
 @Composable
 @Preview
 fun App() {
-    MaterialTheme {
-        SnakeGame()
-    }
+    // MaterialTheme {
+    SnakeGame()
+    // }
 }

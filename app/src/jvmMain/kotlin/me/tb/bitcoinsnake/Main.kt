@@ -14,6 +14,7 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
+import me.tb.bitcoinsnake.presentation.App
 
 fun main() = application {
     var restartTrigger by remember { mutableStateOf(0) }
@@ -31,9 +32,7 @@ fun main() = application {
             Menu("Game") {
                 Item(
                     "Restart",
-                    onClick = {
-                        restartTrigger++
-                    },
+                    onClick = { restartTrigger++ },
                     shortcut = KeyShortcut(Key.R, meta = true)
                 )
             }
