@@ -14,10 +14,15 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
+import me.tb.bitcoinsnake.domain.BitcoinWallet
 import me.tb.bitcoinsnake.presentation.App
+import org.bitcoindevkit.Descriptor
+import org.bitcoindevkit.Network
 
 fun main() = application {
     var restartTrigger by remember { mutableStateOf(0) }
+    val descriptor = Descriptor("tr(tprv8ZgxMBicQKsPdWAHbugK2tjtVtRjKGixYVZUdL7xLHMgXZS6BFbFi1UDb1CHT25Z5PU1F9j7wGxwUiRhqz9E3nZRztikGUV6HoRDYcqPhM4/86'/1'/0'/0/*)#x627tk5a", Network.REGTEST)
+    val poolWallet = BitcoinWallet(descriptor)
 
     Window(
         onCloseRequest = ::exitApplication,
@@ -39,7 +44,7 @@ fun main() = application {
         }
 
         key(restartTrigger) {
-            App()
+            App(poolWallet)
         }
     }
 }

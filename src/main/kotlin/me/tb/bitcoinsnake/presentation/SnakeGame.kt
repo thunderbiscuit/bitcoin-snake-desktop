@@ -3,6 +3,7 @@ package me.tb.bitcoinsnake.presentation
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
@@ -33,6 +35,7 @@ import com.composables.icons.lucide.Trophy
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.CornerRadius
@@ -40,6 +43,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -54,15 +58,20 @@ import com.composables.core.rememberDialogState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import me.tb.bitcoinsnake.data.LeaderboardManager
+import me.tb.bitcoinsnake.domain.BitcoinWallet
 import me.tb.bitcoinsnake.domain.CELL_SIZE
 import me.tb.bitcoinsnake.domain.Direction
 import me.tb.bitcoinsnake.domain.GRID_SIZE
+import me.tb.bitcoinsnake.domain.PaymentType
 import me.tb.bitcoinsnake.domain.SnakeGameLogic
 import me.tb.bitcoinsnake.domain.Speed
+import me.tb.bitcoinsnake.domain.bip21Uri
+import me.tb.bitcoinsnake.domain.generateQRCodeImage
 
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun SnakeGame(
+    wallet: BitcoinWallet,
     onRestartRequest: (() -> Unit)? = null
 ) {
     val gameLogic = remember { SnakeGameLogic() }
@@ -72,6 +81,7 @@ fun SnakeGame(
     var isPlaying by remember { mutableStateOf(false) }
     val modeSelectionDialogState = rememberDialogState(initiallyVisible = true)
     var gameMode by remember { mutableStateOf<String?>(null) }
+    val intermediaryDialogState = rememberDialogState()
     val nameDialogState = rememberDialogState()
     val leaderboardDialogState = rememberDialogState()
     var playerName by remember { mutableStateOf("") }
@@ -158,8 +168,7 @@ fun SnakeGame(
                         gameMode = "practice"
                         gameState = gameLogic.createInitialState(pauses = 0, lives = 1)
                         modeSelectionDialogState.visible = false
-                        isPlaying = false
-                        focusRequester.requestFocus()
+                        intermediaryDialogState.visible = true
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
@@ -170,8 +179,7 @@ fun SnakeGame(
                     onClick = {
                         gameMode = "glory"
                         modeSelectionDialogState.visible = false
-                        isPlaying = false
-                        focusRequester.requestFocus()
+                        intermediaryDialogState.visible = true
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
@@ -186,6 +194,62 @@ fun SnakeGame(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text("Show me the leaderboard", fontFamily = FontFamily.Monospace)
+                }
+            }
+        }
+    }
+
+    // Intermediary dialog (before game starts)
+    Dialog(state = intermediaryDialogState) {
+        Scrim(
+            scrimColor = Color.Black.copy(alpha = 0.8f),
+            enter = fadeIn(),
+            exit = fadeOut()
+        )
+
+        DialogPanel(
+            modifier = Modifier
+                .fillMaxWidth(0.7f)
+                .background(Color(0xFF2D2D2D), RoundedCornerShape(16.dp))
+                .padding(40.dp)
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(20.dp)
+            ) {
+                Text(
+                    text = "Get Ready!",
+                    style = MaterialTheme.typography.headlineLarge,
+                    color = Color.White,
+                    fontFamily = FontFamily.Monospace
+                )
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                val address = wallet.getNewAddress()
+                val bip21Uri = bip21Uri(address, PaymentType.GLORY)
+                val qrCode = generateQRCodeImage(bip21Uri, 1000, 1000)
+
+                val imageBitmap = qrCode.toComposeImageBitmap()
+
+                Image(
+                    bitmap = imageBitmap,
+                    contentDescription = "QR Code",
+                    modifier = Modifier
+                        .height(400.dp)
+                        .width(400.dp)
+                        .clip(RoundedCornerShape(24.dp))
+                )
+
+                Button(
+                    onClick = {
+                        intermediaryDialogState.visible = false
+                        isPlaying = false
+                        focusRequester.requestFocus()
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Start Game", fontFamily = FontFamily.Monospace)
                 }
             }
         }
