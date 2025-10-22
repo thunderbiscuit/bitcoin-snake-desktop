@@ -32,6 +32,9 @@ dependencies {
     // implementation(libs.kotlinx.serialization.json)
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.0")
 
+    // Navigation
+    implementation("org.jetbrains.androidx.navigation:navigation-compose:2.9.1")
+
     implementation("com.composables:core:1.46.0")
     implementation("com.composables:icons-lucide:1.0.0")
 
