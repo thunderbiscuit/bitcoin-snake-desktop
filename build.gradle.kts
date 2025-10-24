@@ -2,7 +2,7 @@ import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 
 plugins {
     id("org.jetbrains.kotlin.jvm") version "2.2.20"
-    id("org.jetbrains.compose") version "1.9.1"
+    id("org.jetbrains.compose") version "1.10.0-alpha03"
     id("org.jetbrains.kotlin.plugin.compose") version "2.2.20"
     id("org.jetbrains.kotlin.plugin.serialization") version "2.2.20"
     // id("org.jlleitschuh.gradle.ktlint") version "12.1.2"
@@ -27,14 +27,13 @@ dependencies {
     implementation(compose.material3)
     implementation(compose.components.uiToolingPreview)
 
-    // implementation(libs.androidx.lifecycle.viewmodelCompose)
-    // implementation(libs.androidx.lifecycle.runtimeCompose)
-    // implementation(libs.kotlinx.serialization.json)
+    // Serialization
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.0")
 
-    // Navigation
-    implementation("org.jetbrains.androidx.navigation:navigation-compose:2.9.1")
+    // Navigation 3
+    implementation("org.jetbrains.androidx.navigation3:navigation3-ui-desktop:1.0.0-alpha03")
 
+    // composables.com
     implementation("com.composables:core:1.46.0")
     implementation("com.composables:icons-lucide:1.0.0")
 

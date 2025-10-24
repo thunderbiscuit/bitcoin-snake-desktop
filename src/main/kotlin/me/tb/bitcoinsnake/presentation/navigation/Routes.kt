@@ -1,5 +1,6 @@
 package me.tb.bitcoinsnake.presentation.navigation
 
+import androidx.navigation3.runtime.NavKey
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -9,4 +10,9 @@ object WelcomeRoute
 object PaymentRoute
 
 @Serializable
-object GameRoute
+sealed interface Destinations : NavKey {
+    @Serializable
+    object WelcomeScreen : Destinations
+    @Serializable
+    object PaymentScreen : Destinations
+}

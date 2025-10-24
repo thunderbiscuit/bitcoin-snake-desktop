@@ -14,7 +14,7 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
-import me.tb.bitcoinsnake.domain.BitcoinWallet
+import me.tb.bitcoinsnake.data.BitcoinWallet
 import me.tb.bitcoinsnake.presentation.App
 import org.bitcoindevkit.Descriptor
 import org.bitcoindevkit.Network
