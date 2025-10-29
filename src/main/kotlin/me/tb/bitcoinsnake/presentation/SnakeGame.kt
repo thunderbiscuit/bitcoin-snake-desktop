@@ -63,16 +63,21 @@ import me.tb.bitcoinsnake.domain.Speed
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun SnakeGame(
+    gameMode: String,
     onRestartRequest: (() -> Unit)? = null
 ) {
     val gameLogic = remember { SnakeGameLogic() }
     val leaderboardManager = remember { LeaderboardManager() }
-    var gameState by remember { mutableStateOf(gameLogic.createInitialState()) }
+    val initialState = remember(gameMode) {
+        if (gameMode == "practice") {
+            gameLogic.createInitialState(pauses = 0, lives = 1)
+        } else {
+            gameLogic.createInitialState()
+        }
+    }
+    var gameState by remember { mutableStateOf(initialState) }
     var currentDirection by remember { mutableStateOf(Direction.RIGHT) }
     var isPlaying by remember { mutableStateOf(false) }
-    val modeSelectionDialogState = rememberDialogState(initiallyVisible = true)
-    var gameMode by remember { mutableStateOf<String?>(null) }
-    val intermediaryDialogState = rememberDialogState()
     val nameDialogState = rememberDialogState()
     val leaderboardDialogState = rememberDialogState()
     var playerName by remember { mutableStateOf("") }
@@ -125,69 +130,6 @@ fun SnakeGame(
     // Request focus when component mounts
     LaunchedEffect(Unit) {
         focusRequester.requestFocus()
-    }
-
-    // Mode selection dialog
-    Dialog(state = modeSelectionDialogState) {
-        Scrim(
-            scrimColor = Color.Black.copy(alpha = 0.8f),
-            enter = fadeIn(),
-            exit = fadeOut()
-        )
-
-        DialogPanel(
-            modifier = Modifier
-                .fillMaxWidth(0.7f)
-                .background(Color(0xFF2D2D2D), RoundedCornerShape(16.dp))
-                .padding(40.dp)
-        ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(20.dp)
-            ) {
-                Text(
-                    text = "Bitcoin Snake",
-                    style = MaterialTheme.typography.headlineLarge,
-                    color = Color.White,
-                    fontFamily = FontFamily.Monospace
-                )
-
-                Spacer(modifier = Modifier.height(20.dp))
-
-                Button(
-                    onClick = {
-                        gameMode = "practice"
-                        gameState = gameLogic.createInitialState(pauses = 0, lives = 1)
-                        modeSelectionDialogState.visible = false
-                        intermediaryDialogState.visible = true
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("I want practice", fontFamily = FontFamily.Monospace)
-                }
-
-                Button(
-                    onClick = {
-                        gameMode = "glory"
-                        modeSelectionDialogState.visible = false
-                        intermediaryDialogState.visible = true
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("I want glory", fontFamily = FontFamily.Monospace)
-                }
-
-                Button(
-                    onClick = {
-                        modeSelectionDialogState.visible = false
-                        leaderboardDialogState.visible = true
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Show me the leaderboard", fontFamily = FontFamily.Monospace)
-                }
-            }
-        }
     }
 
     // Leaderboard modal
@@ -243,20 +185,6 @@ fun SnakeGame(
                                 fontFamily = FontFamily.Monospace
                             )
                         }
-                    }
-                }
-
-                // Show back button only if no game mode is selected yet
-                if (gameMode == null) {
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Button(
-                        onClick = {
-                            leaderboardDialogState.visible = false
-                            modeSelectionDialogState.visible = true
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Back", fontFamily = FontFamily.Monospace)
                     }
                 }
             }

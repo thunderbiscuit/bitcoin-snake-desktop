@@ -8,7 +8,9 @@ import androidx.compose.runtime.remember
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.ui.NavDisplay
 import me.tb.bitcoinsnake.data.BitcoinWallet
+import me.tb.bitcoinsnake.domain.SnakeGameLogic
 import me.tb.bitcoinsnake.presentation.PaymentScreen
+import me.tb.bitcoinsnake.presentation.SnakeGame
 import me.tb.bitcoinsnake.presentation.WelcomeScreen
 import me.tb.bitcoinsnake.presentation.viewmodels.PaymentsViewModel
 
@@ -34,8 +36,17 @@ fun Navigation(wallet: BitcoinWallet) {
 
                 PaymentScreen(
                     state = state,
+                    events = viewModel.events,
                     onAction = viewModel::onAction,
+                    onNavigation = {
+                        val mode = if (state.gameMode == me.tb.bitcoinsnake.domain.GameMode.PRACTICE) "practice" else "glory"
+                        backStack.add(Destinations.GameScreen(mode))
+                    }
                 )
+            }
+
+            entry<Destinations.GameScreen> { (gameMode) ->
+                SnakeGame(gameMode = gameMode)
             }
         }
     )

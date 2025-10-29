@@ -4,10 +4,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import me.tb.bitcoinsnake.data.BitcoinWallet
 import me.tb.bitcoinsnake.presentation.navigation.Navigation
-import org.jetbrains.compose.ui.tooling.preview.Preview
 
 @Composable
-@Preview
 fun App(
     wallet: BitcoinWallet,
 ) {

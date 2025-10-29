@@ -8,7 +8,7 @@ import org.bitcoindevkit.ElectrumClient as BdkElectrumClient
 class ElectrumClient(
     val url: String,
 ) {
-    val client: BdkElectrumClient = BdkElectrumClient(url)
+    private val client: BdkElectrumClient = BdkElectrumClient(url)
 
     fun sync(syncRequest: SyncRequest): Update {
         return client.sync(syncRequest, 10uL, true)

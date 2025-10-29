@@ -23,6 +23,7 @@ fun main() = application {
     var restartTrigger by remember { mutableStateOf(0) }
     val descriptor = Descriptor("tr(tprv8ZgxMBicQKsPdWAHbugK2tjtVtRjKGixYVZUdL7xLHMgXZS6BFbFi1UDb1CHT25Z5PU1F9j7wGxwUiRhqz9E3nZRztikGUV6HoRDYcqPhM4/86'/1'/0'/0/*)#x627tk5a", Network.REGTEST)
     val poolWallet = BitcoinWallet(descriptor)
+    val electrumUrl: String = "tcp://127.0.0.1:60401"
 
     Window(
         onCloseRequest = ::exitApplication,
